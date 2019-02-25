@@ -1,0 +1,337 @@
+---
+title: "The grammar of protein domain architectures"
+author: 'Lijia Yu, Deepak Kumar Tanwar, Emanuel Diego S. Penha, Yuri I. Wolf, Eugene V. Koonin, Malay Kumar Basu'
+header-includes:
+- \usepackage{caption}
+- \captionsetup[figure]{labelformat=empty}
+mainfont: "Minion Pro"
+fontsize: 12pt
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    latex_engine: xelatex
+  word_document:
+    toc: yes
+geometry: margin=0.75in
+subtitle: Supplementary information
+bibliography: "/Users/malay/m/Readings/Zotero_library/export/library.bib"
+csl: pnas.csl
+
+---
+
+\listoffigures
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Supplementary methods
+
+## Domain structure determination
+
+We used two methods to determine the domain composition of all the proteins encoded in each selected genome. In the first method, we used `hmmscan` from the HMMER (v. 3.1b)[@eddy2011, v. 3.1b]  package using default parameters to identify domains in each genomes using Pfam-A database (release 30)[@finn2010]. We then used a Perl script to parse the output of `hmmscan` to find non-overlapping regions on the protein sequence corresponding to each domain. The parsing is based on the following criteria:
+
+1.	“Independent e-value (i-Evalue)” for the domain hit is less than 0.001
+2.	Only “domain” and “family” were retained
+3.	When two hits overlap, only the one with the highest bit score (“full sequence”) was kept.
+4.	Each Pfam ID was checked to determine whether it belongs to a clan. If so, then Pfam ID was replaced with the clan id.
+
+In the second method, which was used mainly for the verification of the results, we used domain mappings of proteomes as provided by the Pfam directly. As Pfam did not provide data for all the species in UniProt, this data is a subset, including  426 eukaryotic, 2543 bacterial and 127 archaeal genomes, of the UniProt dataset. The results from the two methods were identical for all the overlapping species sets, therefore, unless otherwise specified, the presented results are from the first method using the larger dataset.
+
+
+## The N-gram model of a protein language
+If a protein sequence is composed of domains $(d_1,\cdots,d_n)$ the probability of the whole protein is given by the chain rule of probability [@jurafsky2008], 
+
+\begin{equation}
+\label{pprot}
+P(d_1,\cdots,d_n) = P(d_1) \times P(d_2 \mid d_1) \times P(d_3 \mid d_1,d_2) \times \cdots \times P(d_n \mid d_1,\cdots,d_{n-1}).
+\end{equation}
+
+
+The chain rule shows that the joint probability of a series of domains can be determined by the multiplication of conditional probabilities, each denoting the probability of a domain given the series of preceding domains. In the case of protein domains, it is impossible to calculate the probability of a domain given every long string of preceding domains because of the scarcity of such data in a genome. However, the conditional probabilities can be approximated by a Markov process, where the probability of a given domain depends only on a limited number of preceding domains. The number of preceding domains determines the order: a first order Markov process considers one preceding domain (bigram), a second order considers two (trigram), and so on. 
+
+Modeling domains under a first order Markov process, where the probability of a domain ($d_n$) depends only on the one preceding domain ($d_{n-1}$) is called bigram model, and the domain pair ($d_{n-1},d_n$) is called a bigram. The conditional probability of the domain ($d_n$) given the preceding domain ($d_{n-1}$) is as follows:
+
+\begin{equation}
+P(d_n \mid d_{n-1}) = \frac{P(d_{n-1},d_n)}{P(d_{n-1})}
+\end{equation}
+
+We can estimate this probability using the maximum likelihood estimation (MLE):
+
+\begin{equation}
+\label{mle}
+P_{MLE}(d_n \mid d_{n-1}) = \frac{C(d_{n-1},d_n)}{C(d_{n-1})}
+\end{equation}
+
+where $C(d_{n-1},d_n)$ is the count of  the bigram $(d_{n-1},d_n)$ in the genome, and $C(d_{n-1})$ is the count of all bigrams where the first domain is $d_{n-1}$, which is equivalent to the count of domain $d_{n-1}$ in the genome.
+
+## Good-Turing smoothing
+
+The biggest problem with N-gram models is the sparsity of the data. Most of the domains are present in strictly constrained contexts and participate only in a restricted number of domain pairs. A large number of the conditional probabilities are, therefore, 0 in a genome. Some of the ways in which this sparsity of the data can be handled are described below. 
+
+The simplest way to tackle the 0 probabilities is to add 1 to all bigram counts. This “add-one” smoothing or “Laplace correction” has been used for many sparse datasets. However, because of the nature of the distribution of bigrams in a genome (power-law with extended tail of low counts) [@basu2009;@basu2008], the method adds too much weight to missing data and cannot be used in N-gram modeling [@jurafsky2008]. In computational linguistics, numerous other methods have been developed to address this problems, such as Katz backoff [@Katz1987_Estimation], Kneser-Ney algorithm [@Kneser1995_Improved], etc.
+
+In contrast to add-one smoothing where we add counts to bigrams with 0 count, discounting methods decrease counts for the existing bigrams to assign probabilities to unobserved bigrams. The most popular of all the discounting methods is Good-Turing smoothing [@Good1953_population]. The first step in a Good-Turing estimate is to create a table of “frequencies of frequencies” where the observations are binned into $J$ number of bins where $S(J)$ is the count of bigrams that are contained exactly $J$ times in the genome. For example, $S(J_1)$ is the count of bigrams present exactly once in the genome (singletons); $S(J_2)$ is the count of bigrams present exactly twice, and so on. The Good-Turing method discounts the probability from existing bigrams in the genome and assings it to the bigrams that are absent. If the MLE count (as in Eq. \ref{mle}) of a bigram is $C$, then a Good-Turing count will be, 
+
+\begin{equation}
+f_{GT} = (C + 1)\frac{S(J{c+1})}{S(J_c)}
+\end{equation}
+
+We used a modified version of the original Good-Turing smoothing called Simple Good-Turing (SGT)[@gale1995], where the estimate of the missing bigram is calculated from a linear regression of a log-log plot of frequency vs. frequency of frequency of bigrams in the genome. The method takes advantage of the power-law characteristic of this relationship. We used the public domain SGT calculator for this calculation (https://www.grsampson.net/D_SGT.c). SGT gives us the modified probabilities ($P_{SGT}$) of each bigram type in the genome and the total probability of all missing bigrams ($P_0$). After determining the $P_{SGT}$, these probabilities were renormalized so that they sum to 1, and the normalized probabilities were multiplied by the total bigram count to obtain the new SGT count for each bigram.
+
+The Good-Turing smoothing assigns the probability estimate of all the missing bigrams in the genome to be $S(J_1)/N$ ( given as $P_0$ in SGT), where $J_1$ is the count of singletons in the genome and $N$ is the total number of bigrams in the genome. This probability space will be divided equally among the bigrams that are missing from the genome. If the number of domain types (number of unique domain families in a genome) is $V$ (vocabulary), then, the number of all possible bigram types is $V^2$. If there are $Bt$ types of bigrams in the genome, then, the number of missing types are ($V^2-Bt$). The total probability space $P_0$  will be equally divided amongst all the missing bigram. Therefore, the probability of a missing bigram is: 
+
+\begin{equation}
+P(Missing)=  \frac{P_0}{V^2-Bt}
+\end{equation}
+
+Once the Good-Turing counts are estimated, these counts were used to calculate the conditional probabilities as shown in Eq. \ref{mle}.
+
+## Calculation of the difference and overlap between two entropy distributions
+
+The statistical significance of the difference between the medians of two distributions was estimated by a permutation test. The categories of the data were randomly shuffled 1000 times, each time we calculated the difference of the medians of the two categories. The P-value of the observed difference between the medians of the two categories was then obtained from the distribution generated using random permutations.
+
+The overlap between two distributions was measured by calculating the fraction of discordant points in two distributions. To this end, all pairwise points in the two distributions were compared and the minimum of the following two values were calculated: (a) number of points in one distribution having values greater than the points in the other distribution and, (b) number of points in one distribution having values smaller than the points in the other distribution. The lower of these two values is a conservative estimate of the similarity between the two distributions. This number was then divided by the total number of comparisons. If two distributions are non-overlapping, all the points in one distribution will show the same trend and thus the number of discordant points will be 0. If two distributions are identical, the two numbers will be identical, with half of the points being discordant, and thus, the maximum overlap value calculated with this method will be 0.5. 
+
+An independent calculation of the overlap between two distributions was performed using the Bhattacharyya coefficient [@bhattacharyya1943], a well-known measure of similarity between two distributions. To compare two distributions, each was partitioned into optimal bins through the kernel density estimate using the R function `bw.nrd0`, and the similarity between the distributions was estimated using the following formula:
+
+\begin{equation}
+BC(p,q) = \sum_{i=1}^{n}\sqrt{p_iq_i}
+\end{equation}
+
+where $p$ and $q$ are the two distributions, $n$ is the number of bins, and $p_i$ and $q_i$ are members of the corresponding distributions in the given bin.
+
+## Cross entropy (perplexity)
+
+Given that N-gram language models are generative, “cross entropy” or “perplexity” is a measure of how  well a given language model describes a language [@jurafsky2008]. If the sequence of domains in a genome is $D=d_1,d_2,\cdots,d_N$, the perplexity of the genome is measured as,
+
+\begin{eqnarray}
+PP(D) &=& P(d_1,d_2,\cdots,d_N)^{-\frac{1}{N}}\\
+&=& \sqrt[N]{\frac{1}{P(d_1,d_2,\cdots,d_N)}} \label{pp}
+\end{eqnarray}
+
+where $N$ is the total number of domains in the genome. Given the bigram model of the genome, the above equation can be expanded using the chain rule of probability:
+
+
+
+\begin{equation}
+PP(D) = \sqrt[N]{\prod_{n=1}^N \frac{1}{P(d_n \mid d_{n-1})}}
+\end{equation}
+
+From this equation, it is clear that the higher the conditional probabilities of a bigram, the lower the perplexity. Because in a bigram model, the probability of a genome can be approximated by the sum of weighted probabilities of each bigram present in the genome, perplexity described by Eq. \ref{pp} can be rewritten in terms of entropy of the language model (for a detailed explanation of this relationship, please refer [@jurafsky2008]. Breiefly, if $d_i$ is a domain, then the entropy of a unigram model is:
+
+\begin{equation}
+H_w = - \frac{1}{N} \sum_N count(d_i) \times log_2 P(d_i)
+\end{equation}
+
+The right side of the equation is nothing but the log probability of the genome in terms of domains or bigrams, divided by number of domains and then taking the negative of the value. 
+
+
+
+\begin{eqnarray}
+H_w &=& -\frac{1}{N} log_2 P(d_1,d_2,\cdots,d_n)\\
+&=& log_2 P(d_1,d_2,\cdots,d_n)^{-\frac{1}{N}}
+\end{eqnarray}
+
+This can be written as,
+
+\begin{eqnarray}
+2^{H_w} &=& P(d_1,d_2,\cdots,d_n)^{-\frac{1}{N}}\\
+&=& \sqrt[N]{\frac{1}{P(d_1,d_2,\cdots,d_N)}}
+\end{eqnarray}
+
+The right hand side of this equation is perplexity as shown in Eq. \ref{pp}.
+
+The perplexity can, therefore, be written in terms of entropy as,
+
+
+\begin{equation}
+PP(D) = 2^{H_w}
+\end{equation}
+
+# Supplementary datasets description
+
+## Dataset S1 
+List of species and their taxonomic and genomics information. Column description:
+    
+1. Scientific Name
+2. UniProt database ID
+3. Taxonomy ID in NCBI Taxonomy database
+4. Superkingdom (Bacteria/Archaea/Eukaryote) as provided by UniProt
+5. Kingdom/Phyla information as provided by UniProt
+6. Total amino acid count in the genome
+7. Total protein count in the genome
+
+
+## Dataset S2
+Selected eukaryotic species for the phylogenetic analysis. Column description:
+
+1.	A shortened key used in the figure.
+2.	Taxonomy ID in NCBI Taxonomy database
+3.	UniProt database ID
+4.	Scientific name
+5.	Superkingdom information as provided by UniProt
+6.	Eukaryotic group information as provided by UniProt
+7.	Manually curated supergroups
+
+## Dataset S3
+Domain statistics and unigram and bigram entropy of each genome in the study. Column description:
+
+1. Scientific name
+2. UniProt ID
+3. NCBI Taxonomy ID
+4. Superkingdom information as provided by UniProt
+5. Subdivision or kingdom or phyla information as provided by UniProt
+6. Total domain count in the genome
+7. Unique domain types in the genome
+8. Total bigram count in the genome
+9. Unique bigram types in the genome
+10. Missing bigram types in the genome. Calculated as $(domain\ types)^2 - (bigram\ types)$.
+11. Entropy of unigram model
+12. Entropy of bigram model
+13. Total domain count in the genome after adding N-C markers (see text)
+14. Unique domain types in the genome after adding N-C markers (see text)
+15. Total bigram count in the genome after adding N-C markers (see text)
+16. Unique bigram types in the genome after adding N-C markers (see text)
+17. Missing bigram types in the genome after adding N-C markers (see text). Calculated as $(domain\ types\ with\ NC)^2 - (bigram\ types\ with\ NC)$.
+18. Entropy of unigram model after adding N-C markers (see text)
+19. Entropy of bigram model after adding N-C markers (see text)
+20. Bigram entropy of the genome after shuffling the domain (see text).
+21. Relative entropy, calculated as (Column 11 - Column 12).
+22. Relative entropy with N-C markers, calculated as (Column 18 - Column 19).
+23. Relative entropy of shuffled genome, calculated as (Column 18 - Column 20).
+24. Relative entropy of empirical and shuffled bigram models, calculated as (Column 20 - Column 19).
+
+## Dataset S4
+Log-linear regression statistics of entropy values and log converted biological variables. Column description:
+
+1. Superkingdom/kingdom/phyla
+2. Biological variables: domain type, domain count, protein count, and amino acid count
+3. Slope of the linear regression line between unigram entropy vs log10(variable)
+4. $R^2$ of the regression
+5. $P$ value of the regression
+6. Slope of the linear regression line between bigram entropy vs log10(variable)
+7. $R^2$ of the regression
+8. $P$ value of the regression
+
+
+## Dataset S5
+The median unigram, bigram, shuffled bigram entropies, and three relative entropies in all supkerkingdoms and major subdivisions of life.
+
+1. Superkingdoms
+2. Kingdom or phylum
+3. Median unigram entropy with N-C markers (bits/domain)
+4. Median bigram entropy after shuffling the domains.
+5. Median bigram entropy after adding N-C markers
+6. Median relative entropies, calculated by taking the median of (Column 3 - Column 5) values for all genomes ($H_g$).
+7. Median relative entropies of shuffled genome, calculated by taking the median of  (Column 3 - Column 4) for all genomes ($H_{gs}$).
+8. Median relative entropies of bigram models, calculated by taking the median of (Column 4 - Column 5) for all genomes ($H_{gb}$).
+
+
+## Dataset S6
+Pairwise differences of the medians and calculation of overlap between relative entropy distributions in 3 superkingdoms. Column description:
+
+1. First superkingdom
+2. Second superkingdom
+3. Whether N and C markers were included in the calculation (see SI Methods). "NC" indicates with these markers and "WNC" indicate without.
+4. P-value for permutation test (see SI Methods).
+5. Bhattacharyya coefficient
+6. Calculation of overlap (see Methods). Max value possible is 0.5.
+
+
+
+## Dataset S7
+Bigram identified using sPLS-DA feature selection. Column description:
+
+1. Domain bigram
+2. Evolutionary split in which the domain bigram was found to be a feature
+3. Loading weights for the split using multiclass sPLS-DA
+4. Loading weights for the split using binary sPLS-DA
+5. Pfam domain Id for the first domain of the bigram
+6. Pfam domain name for the first domain of the bigram
+7. Pfam domain id for the second domain in the bigram
+8. Pfam domain name for the second domain in the bigram
+9. Top 5 gene ontology (GO) terms associated with proteins that contain the bigram 
+
+## Dataset S8
+
+Top 10 gene ontology (GO) terms in each GO categories associated with the proteins that contain the bigrams identified using sPLS-DA feature selection.  Column description:
+
+1. Evolutionary splits
+2. GO categories 
+3. GO terms
+4. Frequency of the GO terms
+
+
+# Supplementary figure legends
+
+## Supplementary Fig. S1
+
+Log-linear regression of the unigram and bigram entropies with various genomic variables in the three superkingdoms of life. Each point corresponds to a genome. Each column corresponds to a superkingdom.  Each row corresponds to a variable against which the regression of entropy is performed. These variables, from top to bottom, are as follows: number of unique domain families in a genome, or domain type **(A to C)**, total domain count **(D to F)**, number of proteins **(G to I)**, and the total count of amino acids **(J to L)** in the genome. In each panel, the X-axis is converted to the log10 scale. The slopes of the regression lines, the $R^2$ and $P$ values are indicated on top of each plot. 
+
+
+## Supplementary Fig. S2
+Linear regression of the unigram and bigram entropies with various genomic variables in three superkingdoms of life. Each point corresponds to a genome. Each column corresponds to a superkingdom. From left to right, they are Bacteria, Archaea, and Eukaryota. Each row is a specific variable. From top to bottom they are: unique domain type in the genome **(A to C)**, total domain count **(D to F)**, number of proteins **(G to I)**, and the total count of amino acids **(J to L)**. The slopes of the regression lines, the $R^2$ and $P$ values are mentioned on top of each plot.
+
+## Supplementary Fig. S3 
+Log-linear regression of the unigram and bigram entropies with various genomic variables in prokaryotes. Each point is a genome. Columns indicate kingdoms or phyla. From left to right, they are Proteobacteria, Crenarchaeota, and Euryarchaeota. Each row is a specific variable. From top to bottom they are as follows: unique domain type in the genome **(A to C)**, total domain count **(D to F)**, number of proteins **(G to I)**, and the total count of amino acids **(J to L)**. In each figure, the X-axis is converted to log10 scale. The slopes of the regression lines, the $R^{2}$ and $P$ values are mentioned on top of each plot. 
+
+## Supplementary Fig. S4 
+Log-linear regression of the unigram and bigram entropies with various genomic variables in eukaryotes. Each point is a genome. Columns indicate kingdoms or phyla. From left to right, they are green plants (Viridiplantae), Fungi, and animals (Metazoa). Each row is a specific variable. From top to bottom they are as follows: unique domain type in the genome **(A to C)**, total domain count **(D to F)**, number of proteins **(G to I)**, and the total count of amino acids **(J to L)**. In each figure, the X-axis is converted to log10 scale. The slopes of the regression lines, the $R^{2}$ and $P$ values are mentioned on top of each plot. 
+
+## Supplementary Fig. S5
+
+Distributions of unigram and bigram and relative entropies without using N-C markers (see Methods for details). **(A)** Density plot of entropy values in three superkingdoms. Each panel represents one superkingdom. From top to bottom the are eukaryotes, archaea, and bacteria. Each peak is labeled with corresponding value and marked with dotted line. The inverted color boxed labels indicate the overall medians of the corresponding distribution. The median values are marked using solid line.  The X-axis represents entropy in bits. **(B)** Box plot of the unigram, bigram and relative entropies in three eukaryotic (green plants, fungi, animals); two archaeal groups (Crenarchaeota and Euryarchaeota); and six bacterial groups (Tenericutes, Acinetobacteria, Bacteroidetes, Firmicutes, Proteobacteria, and Cyanobacteria). Note the dashed horizontal line represents the universal constant relative entropy. For calculation without N-C markers this is ~7 bits.
+
+## Supplementary Fig. S6
+
+Multiclass bigram feature selection using Sparse Partial Discriminant Analysis (sPLS-DA). Weighted bigram probabilities were calculated from each species and sPLS-DA were carried out using multiple classes, each representing a single phylogenetic group, as outcome vector.  The analyses were carried out in a nested hierarchical manner, beginning with the all the kingdoms **(A)**. In the subsequent rounds, analyses were carried out on following kingdoms and subdivisions: prokaryotes **(B)**; Archaea **(C)**; eukaryotes **(D)**; and Opisthokonta **(E)**. For each analysis, biplot with component 1 on X-axis and component 2 on Y-axis is shown. The ellipses represent 95% confidence area of each cluster. 
+
+## Supplementary Fig. S7
+
+Selected bigram features using Sparse Partial Discriminant Analysis (sPLS-DA). For each analysis in (**Fig S6**), the bigram variables were selected for component that showed maximum separation between the supergroups. The barplots show loading values on X-axis for each selected bigram on Y-axis. The color of the bar indicates the classification group shown in the legend. From top to bottom and left to right, the barplots show the selected features and their loading weights for the following classifications: **(A)** All kingdoms; features selected on component 1 separating eukaryotes and prokaryotes; **(B)** Prokaryotes, featureas selected on components 1 separating Bacteria and Archaea;  **(C)** Archaea; features selected component 1 separating Crenarchaeota vs Euryarchaeota; **(D)** Eukaryotes; features selected on component 2 separating Viridiplantae (green plants) and Opisthokonta (Fungi plus animals); **(E)** Opisthokonta; features selected on component 1 separating Fungi and Metazoa (animals).         
+
+
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S1", fig.align='center'}
+#include_graphics("Fig01-log_correlation_entropy.pdf")
+include_graphics("20181214-log_correlation_entropy_fixed_y.pdf")
+```
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S2", fig.align='center'}
+#include_graphics("raw_entropy_correlation_01.pdf.pdf")
+include_graphics("20181214-raw_entropy_correlation_01.pdf")
+```
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S3", fig.align='center'}
+#include_graphics("log_correlation_entropy_subkingdom_bacteria_archaea.pdf")
+include_graphics("20181214-log_correlation_entropy_subkingdom_bacteria_archaea.pdf")
+```
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S4", fig.align='center'}
+#include_graphics("log_correlation_entropy_subkingdom_plant_fungi_metazoa.pdf")
+include_graphics("20181214-log_correlation_entropy_subkingdom_plant_fungi_metazoa.pdf")
+```
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S5", fig.align='center'}
+#include_graphics("wnc_combined.pdf")
+include_graphics("20181214-combined_hist_box_wnc.pdf")
+```
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S6", fig.align='center'}
+include_graphics("splsda_multiclass.pdf")
+```
+\pagebreak
+```{r echo=FALSE, fig.cap="Supplementary Fig. S7", fig.align='center'}
+include_graphics("multiclass_loading.pdf")
+```
+
+# Supplementary references {-}
+\noindent
+\vspace{-2em}
+\setlength{\parindent}{-0.3in}
+\setlength{\leftskip}{0.3in}
+\setlength{\parskip}{8pt}
+
